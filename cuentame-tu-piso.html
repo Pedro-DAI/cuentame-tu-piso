@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cuéntame tu piso en 2 minutos | Somos Vera</title>
+<meta name="description" content="Cuéntame tu piso como a un conocido. Sin formularios. Pedro, de Somos Vera, te llama con tu valoración.">
+<meta property="og:title" content="Cuéntame tu piso en 2 minutos | Somos Vera">
+<meta property="og:description" content="Sin formularios: cuéntalo hablando y Pedro te llama con tu valoración.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#202043; --gold:#f5b03d; --blue:#bfc4d4; --grey:#a69597; --white:#fff;
+  --surface:rgba(255,255,255,.06); --border:rgba(255,255,255,.12);
+  --r:12px; --r-sm:8px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--white);font-family:'DM Sans',sans-serif;font-size:18px;line-height:1.6;min-height:100vh}
+.wrap{max-width:520px;margin:0 auto;padding:20px 20px 48px}
+header{display:flex;align-items:center;justify-content:space-between;padding:4px 0 16px}
+.brand{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:28px;color:var(--gold)}
+.progress{height:8px;background:var(--surface);border-radius:8px;overflow:hidden;margin-bottom:28px}
+.progress i{display:block;height:100%;width:0;background:var(--gold);transition:width .4s}
+h1,h2{font-family:'Cormorant Garamond',serif;font-weight:600;line-height:1.15;margin:0 0 12px}
+h1{font-size:36px} h2{font-size:30px}
+.sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:22px;color:var(--blue);margin:0 0 24px}
+p{margin:0 0 16px;color:rgba(255,255,255,.85)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 4px 24px rgba(0,0,0,.3);margin-bottom:20px}
+.pistas{list-style:none;margin:0;padding:0}
+.pistas li{padding:12px 0;border-bottom:1px solid var(--border);font-size:18px}
+.pistas li:last-child{border-bottom:0}
+.pistas b{color:var(--gold);font-weight:600}
+.btn{display:block;width:100%;min-height:56px;border:0;border-radius:var(--r);font-family:'DM Sans',sans-serif;font-weight:600;font-size:18px;cursor:pointer;padding:14px 18px;margin-top:12px;transition:opacity .2s}
+.btn-primary{background:var(--gold);color:#1a1a2e}
+.btn-secondary{background:transparent;color:var(--white);border:2px solid var(--border)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+label{display:block;font-weight:500;font-size:16px;margin:16px 0 6px;color:var(--blue)}
+input,select,textarea{width:100%;min-height:52px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--white);font-family:'DM Sans',sans-serif;font-size:18px;padding:12px 16px}
+select option{color:#000}
+textarea{min-height:90px}
+.check{display:flex;gap:14px;align-items:flex-start;margin:20px 0 4px;font-size:16px;color:rgba(255,255,255,.85)}
+.check input{width:28px;min-height:28px;height:28px;flex:none;margin-top:2px;accent-color:var(--gold)}
+.timer{font-family:'Cormorant Garamond',serif;font-size:72px;font-weight:700;text-align:center;color:var(--gold);margin:8px 0}
+.pulse{width:20px;height:20px;border-radius:50%;background:#ff5b5b;display:inline-block;margin-right:10px;animation:p 1.2s infinite}
+@keyframes p{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+.rec-label{text-align:center;font-size:18px;margin-bottom:8px}
+.err{background:rgba(255,91,91,.14);border:2px solid #ff8a8a;border-radius:var(--r-sm);padding:14px 16px;margin:16px 0;font-size:17px}
+.faltan{border-color:var(--gold)}
+.hint{font-size:16px;color:var(--grey)}
+.spinner{width:56px;height:56px;border:6px solid var(--border);border-top-color:var(--gold);border-radius:50%;margin:32px auto;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.screen{display:none}
+.screen.on{display:block}
+.legal{font-size:14px;color:var(--grey);margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="brand">Somos Vera</div></header>
+  <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+
+  <!-- 1. Inicio -->
+  <section class="screen on" id="s-inicio">
+    <h1>Cuéntame tu piso como a un conocido</h1>
+    <p class="sub">Sin formularios. Solo hablando, un par de minutos.</p>
+    <div class="card">
+      <p style="margin-bottom:6px"><b>Mientras hablas, puedes decirme:</b></p>
+      <ul class="pistas">
+        <li><b>Dónde está:</b> barrio o calle</li>
+        <li><b>Cómo es:</b> metros, planta, ascensor</li>
+        <li><b>Cómo lo has cuidado:</b> reformas, estado</li>
+        <li><b>Por qué piensas vender</b></li>
+      </ul>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="consent">
+      <label for="consent" style="margin:0;color:inherit;font-size:16px;font-weight:400">Acepto que se grabe mi voz y se guarde lo que cuente para que Pedro, de Somos Vera, prepare mi valoración y me llame. Puedo pedir que lo borren cuando quiera.</label>
+    </div>
+    <button class="btn btn-primary" id="btn-start" disabled>Cuéntame tu piso</button>
+    <div id="err-start"></div>
+  </section>
+
+  <!-- 2. Grabando -->
+  <section class="screen" id="s-grabar">
+    <h2>Te escucho</h2>
+    <p class="rec-label"><span class="pulse"></span>Grabando</p>
+    <div class="timer" id="timer">0:00</div>
+    <p class="hint" style="text-align:center">Habla con tranquilidad. Pulsa el botón cuando termines.</p>
+    <div class="card">
+      <ul class="pistas">
+        <li><b>Dónde está</b></li>
+        <li><b>Cómo es</b></li>
+        <li><b>Cómo lo has cuidado</b></li>
+        <li><b>Por qué piensas vender</b></li>
+      </ul>
+    </div>
+    <button class="btn btn-primary" id="btn-stop">Ya he terminado</button>
+  </section>
+
+  <!-- 3. Procesando -->
+  <section class="screen" id="s-proc">
+    <h2>Un momento…</h2>
+    <p class="sub">Estoy escuchando lo que me has contado.</p>
+    <div class="spinner" role="status" aria-label="Procesando"></div>
+  </section>
+
+  <!-- 4. Confirmar -->
+  <section class="screen" id="s-confirm">
+    <h2>¿Lo he entendido bien?</h2>
+    <p class="sub">Corrige lo que no sea correcto.</p>
+    <div id="aviso-faltan"></div>
+    <div class="card">
+      <label for="f-zona">Dónde está (barrio o calle)</label>
+      <input id="f-zona" type="text" autocomplete="off">
+      <label for="f-metros">Metros cuadrados</label>
+      <input id="f-metros" type="number" inputmode="numeric" min="10" max="2000">
+      <label for="f-planta">Planta</label>
+      <input id="f-planta" type="text" autocomplete="off">
+      <label for="f-ascensor">¿Tiene ascensor?</label>
+      <select id="f-ascensor">
+        <option value="">Elige una opción</option>
+        <option value="si">Sí</option>
+        <option value="no">No</option>
+      </select>
+      <label for="f-estado">Estado del piso</label>
+      <input id="f-estado" type="text" autocomplete="off">
+      <label for="f-motivo">Por qué quiere vender</label>
+      <textarea id="f-motivo"></textarea>
+    </div>
+    <div id="err-confirm"></div>
+    <button class="btn btn-primary" id="btn-confirm">Sí, es correcto</button>
+    <button class="btn btn-secondary" id="btn-repeat">Prefiero volver a contarlo</button>
+  </section>
+
+  <!-- 5. Teléfono -->
+  <section class="screen" id="s-tel">
+    <h2>¿A qué número te llamo?</h2>
+    <p class="sub">Pedro te llamará hoy con tu valoración.</p>
+    <div class="card">
+      <label for="f-nombre">Tu nombre</label>
+      <input id="f-nombre" type="text" autocomplete="given-name">
+      <label for="f-tel">Tu teléfono</label>
+      <input id="f-tel" type="tel" inputmode="tel" autocomplete="tel" placeholder="Por ejemplo, 612 345 678">
+    </div>
+    <div id="err-tel"></div>
+    <button class="btn btn-primary" id="btn-send">Quiero que me llamen</button>
+  </section>
+
+  <!-- 6. Gracias -->
+  <section class="screen" id="s-fin">
+    <h2>Gracias. Ya lo tengo.</h2>
+    <p class="sub">Pedro te llamará hoy con tu valoración.</p>
+    <div class="card">
+      <p style="margin:0">Si prefieres otro momento para la llamada, díselo cuando te llame.</p>
+    </div>
+    <p class="legal">Puedes pedir que se borren tus datos escribiéndonos a somosvera.com</p>
+  </section>
+</div>
+
+<script>
+(function(){
+  // Si la página se sirve desde otro dominio, pon aquí la URL de Railway (sin barra final).
+  var API_BASE = "";
+  var MAX_SECONDS = 150, MIN_SECONDS = 8;
+  var sid = Math.random().toString(36).slice(2,10);
+  var state = { datos:null, transcripcion:"" };
+  var rec=null, chunks=[], stream=null, tInt=null, secs=0, mime="";
+
+  function $(id){return document.getElementById(id)}
+  function ev(evento, extra){
+    try{ navigator.sendBeacon(API_BASE+"/voz/evento", JSON.stringify({evento:evento,sid:sid,extra:extra||null})); }catch(e){}
+  }
+  var steps={"s-inicio":5,"s-grabar":30,"s-proc":55,"s-confirm":70,"s-tel":88,"s-fin":100};
+  function show(id){
+    document.querySelectorAll(".screen").forEach(function(s){s.classList.remove("on")});
+    $(id).classList.add("on"); $("bar").style.width=steps[id]+"%"; window.scrollTo(0,0);
+  }
+  function err(id,msg){ $(id).innerHTML = msg ? '<div class="err" role="alert">'+msg+'</div>' : ""; }
+
+  ev("abre_enlace");
+
+  $("consent").addEventListener("change",function(){
+    $("btn-start").disabled=!this.checked; if(this.checked) ev("consentimiento");
+  });
+
+  function pickMime(){
+    var c=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus"];
+    for(var i=0;i<c.length;i++){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i]; }
+    return "";
+  }
+  function fmt(s){return Math.floor(s/60)+":"+("0"+(s%60)).slice(-2)}
+
+  $("btn-start").addEventListener("click", async function(){
+    err("err-start","");
+    if(!navigator.mediaDevices || !window.MediaRecorder){
+      err("err-start","Este navegador no puede grabar. Prueba con Chrome o Safari actualizados."); ev("error_sin_grabacion"); return;
+    }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    }catch(e){
+      err("err-start","No he podido usar el micrófono. Pulsa «Permitir» cuando el navegador te lo pregunte y vuelve a intentarlo."); ev("error_microfono"); return;
+    }
+    mime=pickMime(); chunks=[];
+    rec = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
+    rec.ondataavailable=function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop=onStopped;
+    rec.start(); secs=0; $("timer").textContent="0:00";
+    tInt=setInterval(function(){ secs++; $("timer").textContent=fmt(secs); if(secs>=MAX_SECONDS) stop(); },1000);
+    show("s-grabar"); ev("empieza_grabar");
+  });
+
+  function stop(){
+    if(secs<MIN_SECONDS){ alert("Cuéntame un poco más, por favor. Hace falta al menos unos segundos."); return; }
+    clearInterval(tInt);
+    if(rec && rec.state!=="inactive") rec.stop();
+  }
+  $("btn-stop").addEventListener("click", stop);
+
+  async function onStopped(){
+    if(stream) stream.getTracks().forEach(function(t){t.stop()});
+    ev("para_grabar",{segundos:secs});
+    show("s-proc");
+    var blob=new Blob(chunks,{type:rec.mimeType||mime||"audio/webm"});
+    try{
+      var r=await fetch(API_BASE+"/voz/procesar",{method:"POST",headers:{"Content-Type":blob.type},body:blob});
+      var j=await r.json();
+      if(!r.ok) throw new Error(j.error||"error");
+      state.datos=j.datos; state.transcripcion=j.transcripcion;
+      ev("datos_extraidos",{faltan:(j.datos&&j.datos.faltan)||[]});
+      fill(j.datos); show("s-confirm");
+    }catch(e){
+      ev("error_procesar",{msg:String(e.message||e)});
+      show("s-inicio");
+      err("err-start","No he podido entender el audio. Inténtalo otra vez, en un sitio sin mucho ruido y hablando cerca del móvil o del micrófono.");
+    }
+  }
+
+  function fill(d){
+    d=d||{};
+    $("f-zona").value=d.zona||""; $("f-metros").value=d.metros||"";
+    $("f-planta").value=d.planta||""; $("f-ascensor").value=(d.ascensor==="si"||d.ascensor==="no")?d.ascensor:"";
+    $("f-estado").value=d.estado||""; $("f-motivo").value=d.motivo||"";
+    var f=(d.faltan||[]), names={zona:"dónde está",metros:"los metros cuadrados",planta:"la planta"};
+    $("aviso-faltan").innerHTML = f.length
+      ? '<div class="err faltan" role="alert">Me falta saber: <b>'+f.map(function(k){return names[k]||k}).join(", ")+'</b>. Escríbelo en los cuadros de abajo.</div>' : "";
+  }
+
+  $("btn-repeat").addEventListener("click",function(){ ev("repite"); show("s-inicio"); });
+
+  $("btn-confirm").addEventListener("click",function(){
+    err("err-confirm","");
+    if(!$("f-zona").value.trim() || !$("f-metros").value || !$("f-planta").value.trim()){
+      err("err-confirm","Faltan datos: escribe dónde está, los metros y la planta."); return;
+    }
+    ev("confirma_datos"); show("s-tel");
+  });
+
+  $("btn-send").addEventListener("click", async function(){
+    err("err-tel","");
+    var tel=$("f-tel").value.replace(/[\s.\-()]/g,"");
+    if(!/^(\+?34)?[6789]\d{8}$/.test(tel)){ err("err-tel","Revisa el teléfono: tienen que ser 9 números, por ejemplo 612345678."); return; }
+    var btn=this; btn.disabled=true;
+    var datos=Object.assign({},state.datos||{},{
+      zona:$("f-zona").value.trim(), metros:Number($("f-metros").value), planta:$("f-planta").value.trim(),
+      ascensor:$("f-ascensor").value||null, estado:$("f-estado").value.trim(), motivo:$("f-motivo").value.trim()
+    });
+    delete datos.faltan;
+    try{
+      var r=await fetch(API_BASE+"/voz/lead",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({sid:sid,nombre:$("f-nombre").value.trim(),telefono:tel,datos:datos,
+          resumen:(state.datos&&state.datos.resumen)||"",transcripcion:state.transcripcion})});
+      if(!r.ok) throw new Error("lead");
+      ev("deja_telefono"); show("s-fin");
+    }catch(e){
+      btn.disabled=false; ev("error_lead");
+      err("err-tel","No he podido enviarlo. Inténtalo otra vez en un momento.");
+    }
+  });
+})();
+</script>
+</body>
+</html>
