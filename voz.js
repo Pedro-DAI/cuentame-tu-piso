@@ -42,6 +42,11 @@ module.exports = function (app) {
     next();
   };
 
+  // Página interna para procesar notas de voz de WhatsApp
+  app.get("/nota", (req, res) => {
+    res.sendFile(path.join(__dirname, "nota.html"));
+  });
+
   // Página
   app.get("/cuentame-tu-piso", (req, res) => {
     res.sendFile(path.join(__dirname, "cuentame-tu-piso.html"));
@@ -169,3 +174,33 @@ module.exports = function (app) {
     res.sendStatus(204);
   });
 };
+
+// Reutilizable desde whatsapp.js: audio (Buffer) -> { transcripcion, datos }
+async function procesarAudio(buffer, contentType) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("Falta OPENAI_API_KEY");
+  const ct = contentType || "audio/ogg";
+  const form = new FormData();
+  form.append("file", new Blob([buffer], { type: ct }), "audio." + extension(ct));
+  form.append("model", "whisper-1");
+  form.append("prompt", "Propietario hablando de su piso en Barcelona: barrio, metros cuadrados, planta, ascensor, reformas.");
+  const tr = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST", headers: { Authorization: "Bearer " + key }, body: form,
+  });
+  if (!tr.ok) throw new Error("Whisper " + tr.status);
+  const transcripcion = ((await tr.json()).text || "").trim();
+  if (transcripcion.length < 10) throw new Error("Audio no entendido");
+  const ex = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini", temperature: 0, response_format: { type: "json_object" },
+      messages: [{ role: "system", content: EXTRACTION_PROMPT }, { role: "user", content: transcripcion }],
+    }),
+  });
+  if (!ex.ok) throw new Error("Extraccion " + ex.status);
+  const datos = JSON.parse((await ex.json()).choices[0].message.content);
+  return { transcripcion, datos };
+}
+module.exports.procesarAudio = procesarAudio;
+module.exports.MAKE_WEBHOOK_URL = MAKE_WEBHOOK_URL;
