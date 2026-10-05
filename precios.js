@@ -79,10 +79,6 @@ const ALIAS = {
 };
 for (const m of Object.keys(MUNIS)) ALIAS[norm(m)] = m;
 
-// Barrios de Barcelona ciudad que no tienen código postal fiable en el texto:
-// si se detecta uno de estos, hay que preguntar el código postal antes de cerrar.
-const BARRIOS_BCN = ["sant gervasi", "bonanova", "sarria", "gracia", "eixample", "les corts", "sants", "poblenou", "horta", "guinardo", "nou barris", "sant andreu", "sant marti", "pedralbes", "born", "gotico", "ciutat vella", "montjuic", "barceloneta", "poble sec", "raval", "diagonal", "putxet", "tres torres", "vallcarca", "clot", "sagrada familia", "sagrera", "carmel"];
-
 // -> { tipo: "ok", pm2, nivel: "cp" | "municipio", zona } | { tipo: "pedir_cp" } | { tipo: "no" }
 function buscarPrecio(datos) {
     datos = datos || {};
@@ -92,18 +88,19 @@ function buscarPrecio(datos) {
     const cp = (cpDato && cpDato[0]) || (cpTexto && cpTexto[0]) || null;
     if (cp && BCN_CP[cp]) return { tipo: "ok", pm2: BCN_CP[cp].pm2, nivel: "cp", zona: BCN_CP[cp].zona };
 
-  const claves = Object.keys(ALIAS).sort((a, b) => b.length - a.length);
+const claves = Object.keys(ALIAS).sort((a, b) => b.length - a.length);
     for (const k of claves) {
-          if (new RegExp("(^| )" + k + "( |$)").test(texto)) {
-                  const muni = ALIAS[k];
-                  // "Barcelona" a secas sin barrio reconocible: mejor pedir el código postal que dar un rango muy ancho.
-            if (muni === "Barcelona" && !cp) return { tipo: "pedir_cp" };
-                  return { tipo: "ok", pm2: MUNIS[muni], nivel: "municipio", zona: muni };
-          }
+        if (new RegExp("(^| )" + k + "( |$)").test(texto)) {
+            const muni = ALIAS[k];
+            // "Barcelona" a secas sin barrio reconocible: mejor pedir el código postal que dar un rango muy ancho.
+        if (muni === "Barcelona" && !cp) return { tipo: "pedir_cp" };
+            return { tipo: "ok", pm2: MUNIS[muni], nivel: "municipio", zona: muni };
+        }
     }
-    if (cp) return { tipo: "no" }; // código postal fuera de la tabla
-  if (BARRIOS_BCN.some((b) => new RegExp("(^| )" + b + "( |$)").test(texto))) return { tipo: "pedir_cp" };
-    return { tipo: "no" };
+    if (cp) return { tipo: "no" }; // ya tenemos un código postal y no está en la tabla: no insistimos más
+if (!texto.trim()) return { tipo: "no" }; // no hay ni zona ni municipio: no hay nada que preguntar
+// Zona no reconocida (calle, barrio no listado, etc.): mejor pedir el código postal que rendirse sin más.
+return { tipo: "pedir_cp" };
 }
 
 module.exports = { buscarPrecio, BCN_CP, MUNIS };
