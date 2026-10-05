@@ -230,19 +230,8 @@ async function procesarEntrada(msg, nombre) {
     s.datos[campo] = txt; return siguientePaso(s, from);
   }
 
-  // 4) Ya cerrado: lo que escriba después se lo pasamos a Pedro
-  if (s.paso === "listo") {
-    let nota = txt;
-    if (msg.type === "audio") {
-      try {
-        const { buffer, contentType } = await descargarAudio(msg.audio.id);
-        nota = (await procesarAudio(buffer, contentType)).transcripcion;
-      } catch (e) { return texto(from, T.noEntendido); }
-    }
-    if (!nota) return;
-    await avisarPedro(s, from, { fuente: "whatsapp-mensaje-adicional", resumen: "Mensaje adicional: " + nota, transcripcion: nota });
-    return texto(from, T.extra);
-  }
+    // 4) Ya cerrado: no se reenvía nada más a Pedro (antes mandaba un email por cada mensaje)
+    if (s.paso === "listo") return;
 }
 
 module.exports = function (app) {
