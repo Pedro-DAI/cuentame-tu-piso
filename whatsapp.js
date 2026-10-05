@@ -15,6 +15,9 @@ const colas = new Map();
 const T = {
   consentimiento:
     "Hola, soy Pedro, de Somos Vera. Para valorar tu piso voy a guardar tu voz y lo que me cuentes, solo para prepararte la valoración y llamarte. ¿Estás de acuerdo?",
+  consentimientoConAudio:
+    "Hola, soy Pedro, de Somos Vera. Ya tengo tu audio. Antes de escucharlo: para valorar tu piso guardaré tu voz y lo que me cuentes, solo para prepararte la valoración y llamarte. ¿Estás de acuerdo?",
+  escuchando: "Gracias. Lo estoy escuchando, dame un momento…",
   pideAudio:
     "Perfecto. Mantén pulsado el micrófono (abajo a la derecha) y cuéntame tu piso como a un conocido: dónde está, cuántos metros tiene, qué planta, si hay ascensor, cómo está y por qué piensas vender. Cuando termines, suelta.",
   noConsiente: "Sin problema. Si cambias de idea, escríbeme cuando quieras.",
@@ -41,7 +44,7 @@ function cola(from, fn) {
 
 async function api(body) {
   const id = process.env.WHATSAPP_PHONE_ID, token = process.env.WHATSAPP_TOKEN;
-  if (!id || !token) return;
+  if (!id || !token) { console.error("WhatsApp: faltan WHATSAPP_PHONE_ID / WHATSAPP_TOKEN"); return; }
   const r = await fetch(`${GRAPH}/${id}/messages`, {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
@@ -93,6 +96,25 @@ function ev(nombre, from) {
   console.log(JSON.stringify({ voz_evento: nombre, from_tail: from.slice(-4), t: new Date().toISOString() }));
 }
 
+// Procesa la descripción principal (audio o texto largo) y sigue el flujo
+async function procesarDescripcion(s, from, entrada) {
+  try {
+    if (entrada.tipo === "audio") {
+      const { buffer, contentType } = await descargarAudio(entrada.mediaId);
+      const r = await procesarAudio(buffer, contentType);
+      s.datos = r.datos || {};
+      s.transcripcion = r.transcripcion;
+    } else {
+      s.datos = (await extraerDatos(entrada.texto)) || {};
+      s.transcripcion = entrada.texto;
+    }
+  } catch (e) {
+    console.error("wa descripcion", e.message);
+    return texto(from, T.noEntendido);
+  }
+  return siguientePaso(s, from);
+}
+
 // Pregunta por lo primero que falte; si no falta nada, cierra
 async function siguientePaso(s, from) {
   const d = s.datos;
@@ -127,32 +149,48 @@ async function procesarEntrada(msg, nombre) {
     ? msg.interactive.button_reply.id : null;
   const txt = msg.type === "text" && msg.text ? (msg.text.body || "").trim() : "";
 
+  const consentBotones = [["consent_si", "Sí, de acuerdo"], ["consent_no", "No, gracias"]];
+  // Si manda el audio (o una descripción larga) ANTES de aceptar, lo guardamos
+  // para no pedírselo dos veces: el anuncio Click-to-WhatsApp invita a mandar la nota de voz directamente.
+  const guardarPendiente = () => {
+    if (msg.type === "audio" && msg.audio) s.pendiente = { tipo: "audio", mediaId: msg.audio.id };
+    else if (txt.length >= 40) s.pendiente = { tipo: "texto", texto: txt };
+  };
+
   // 1) Inicio y consentimiento
   if (s.paso === "inicio" || (s.paso === "fin_sin_consentir" && !boton)) {
     s.paso = "consentimiento";
     ev("wa_inicio", from);
-    return botones(from, T.consentimiento, [["consent_si", "Sí, de acuerdo"], ["consent_no", "No, gracias"]]);
+    guardarPendiente();
+    return botones(from, s.pendiente ? T.consentimientoConAudio : T.consentimiento, consentBotones);
   }
   if (s.paso === "consentimiento") {
-    if (boton === "consent_si") { s.paso = "audio"; ev("wa_consentimiento", from); return texto(from, T.pideAudio); }
-    if (boton === "consent_no") { s.paso = "fin_sin_consentir"; return texto(from, T.noConsiente); }
-    return botones(from, T.consentimiento, [["consent_si", "Sí, de acuerdo"], ["consent_no", "No, gracias"]]);
+    if (boton === "consent_si") {
+      ev("wa_consentimiento", from);
+      if (s.pendiente) {
+        const p = s.pendiente; delete s.pendiente;
+        s.paso = "audio";
+        await texto(from, T.escuchando);
+        return procesarDescripcion(s, from, p);
+      }
+      s.paso = "audio"; return texto(from, T.pideAudio);
+    }
+    if (boton === "consent_no") { s.paso = "fin_sin_consentir"; delete s.pendiente; return texto(from, T.noConsiente); }
+    guardarPendiente();
+    return botones(from, s.pendiente ? T.consentimientoConAudio : T.consentimiento, consentBotones);
   }
 
-  // 2) Audio principal
+  // 2) Descripción principal: audio o, si prefiere escribir, un texto largo
   if (s.paso === "audio") {
-    if (msg.type !== "audio") return texto(from, T.pideAudio);
-    ev("wa_audio_recibido", from);
-    try {
-      const { buffer, contentType } = await descargarAudio(msg.audio.id);
-      const r = await procesarAudio(buffer, contentType);
-      s.datos = r.datos || {};
-      s.transcripcion = r.transcripcion;
-    } catch (e) {
-      console.error("wa audio", e.message);
-      return texto(from, T.noEntendido);
+    if (msg.type === "audio" && msg.audio) {
+      ev("wa_audio_recibido", from);
+      return procesarDescripcion(s, from, { tipo: "audio", mediaId: msg.audio.id });
     }
-    return siguientePaso(s, from);
+    if (txt.length >= 40) {
+      ev("wa_texto_recibido", from);
+      return procesarDescripcion(s, from, { tipo: "texto", texto: txt });
+    }
+    return texto(from, T.pideAudio);
   }
 
   // 3) Datos que faltan (por texto, audio o botón)
@@ -163,6 +201,7 @@ async function procesarEntrada(msg, nombre) {
         const { buffer, contentType } = await descargarAudio(msg.audio.id);
         const t = await transcribirAudio(buffer, contentType);
         const d2 = t ? await extraerDatos(t) : {};
+        s.transcripcion = (s.transcripcion || "") + "\n[" + campo + "] " + t;
         for (const k of ["zona", "metros", "planta", "ascensor"]) {
           if (!s.datos[k] && d2[k] != null && d2[k] !== "") s.datos[k] = d2[k];
         }
@@ -187,6 +226,7 @@ async function procesarEntrada(msg, nombre) {
       s.datos.metros = n; return siguientePaso(s, from);
     }
     if (!txt) return texto(from, T[campo]);
+    if (campo === "zona" && txt.length < 3) return texto(from, T.zona);
     s.datos[campo] = txt; return siguientePaso(s, from);
   }
 

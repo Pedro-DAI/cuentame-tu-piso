@@ -100,6 +100,7 @@ textarea{min-height:90px}
         <li><b>Por qué piensas vender</b></li>
       </ul>
     </div>
+    <div id="err-grabar"></div>
     <button class="btn btn-primary" id="btn-stop">Ya he terminado</button>
   </section>
 
@@ -216,7 +217,8 @@ textarea{min-height:90px}
   });
 
   function stop(){
-    if(secs<MIN_SECONDS){ alert("Cuéntame un poco más, por favor. Hace falta al menos unos segundos."); return; }
+    if(secs<MIN_SECONDS){ err("err-grabar","Cuéntame un poco más, por favor. Sigue hablando unos segundos y vuelve a pulsar el botón."); return; }
+    err("err-grabar","");
     clearInterval(tInt);
     if(rec && rec.state!=="inactive") rec.stop();
   }
@@ -230,6 +232,7 @@ textarea{min-height:90px}
     try{
       var r=await fetch(API_BASE+"/voz/procesar",{method:"POST",headers:{"Content-Type":blob.type},body:blob});
       var j=await r.json();
+      if(r.status===429) throw new Error("limite");
       if(!r.ok) throw new Error(j.error||"error");
       state.datos=j.datos; state.transcripcion=j.transcripcion;
       ev("datos_extraidos",{faltan:(j.datos&&j.datos.faltan)||[]});
@@ -237,6 +240,7 @@ textarea{min-height:90px}
     }catch(e){
       ev("error_procesar",{msg:String(e.message||e)});
       show("s-inicio");
+      if(e.message==="limite"){ err("err-start","Se ha intentado muchas veces seguidas. Espera un rato o llama directamente a Pedro."); return; }
       err("err-start","No he podido entender el audio. Inténtalo otra vez, en un sitio sin mucho ruido y hablando cerca del móvil o del micrófono.");
     }
   }

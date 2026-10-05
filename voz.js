@@ -33,6 +33,19 @@ function extension(contentType) {
   return "webm";
 }
 
+// Límite simple por IP para que nadie dispare el gasto de OpenAI (20 audios/hora)
+const usos = new Map();
+function limitar(req, res, next) {
+  const ip = (req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim();
+  const ahora = Date.now();
+  const lista = (usos.get(ip) || []).filter((t) => ahora - t < 3600000);
+  if (lista.length >= 20) return res.status(429).json({ error: "Demasiados intentos" });
+  lista.push(ahora);
+  usos.set(ip, lista);
+  if (usos.size > 5000) usos.clear();
+  next();
+}
+
 module.exports = function (app) {
   const cors = (req, res, next) => {
     res.set("Access-Control-Allow-Origin", "*");
@@ -41,11 +54,6 @@ module.exports = function (app) {
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
   };
-
-  // Página interna para procesar notas de voz de WhatsApp
-  app.get("/nota", (req, res) => {
-    res.sendFile(path.join(__dirname, "nota.html"));
-  });
 
   // Página
   app.get("/cuentame-tu-piso", (req, res) => {
@@ -57,76 +65,25 @@ module.exports = function (app) {
   app.post(
     "/voz/procesar",
     cors,
+    limitar,
     express.raw({ type: () => true, limit: "25mb" }),
     async (req, res) => {
+      if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: "Falta OPENAI_API_KEY" });
+      if (!req.body || !req.body.length) return res.status(400).json({ error: "Audio vacío" });
       try {
-        const key = process.env.OPENAI_API_KEY;
-        if (!key) return res.status(500).json({ error: "Falta OPENAI_API_KEY" });
-        if (!req.body || !req.body.length) {
-          return res.status(400).json({ error: "Audio vacío" });
-        }
-
-        const ct = req.headers["content-type"] || "audio/webm";
-        const form = new FormData();
-        form.append(
-          "file",
-          new Blob([req.body], { type: ct }),
-          "audio." + extension(ct)
-        );
-        form.append("model", "whisper-1");
-        form.append(
-          "prompt",
-          "Propietario hablando de su piso en Barcelona: barrio, metros cuadrados, planta, ascensor, reformas."
-        );
-
-        const tr = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + key },
-          body: form,
-        });
-        if (!tr.ok) {
-          const detalle = await tr.text();
-          console.error("Whisper error", tr.status, detalle);
-          return res.status(502).json({ error: "No se pudo transcribir" });
-        }
-        const transcripcion = ((await tr.json()).text || "").trim();
-        if (transcripcion.length < 10) {
-          return res.status(422).json({ error: "No se entendió el audio", transcripcion });
-        }
-
-        const ex = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + key,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            temperature: 0,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: EXTRACTION_PROMPT },
-              { role: "user", content: transcripcion },
-            ],
-          }),
-        });
-        if (!ex.ok) {
-          const detalle = await ex.text();
-          console.error("Extracción error", ex.status, detalle);
-          return res.status(502).json({ error: "No se pudieron extraer los datos", transcripcion });
-        }
-        const datos = JSON.parse((await ex.json()).choices[0].message.content);
-        res.json({ transcripcion, datos });
+        const r = await procesarAudio(req.body, req.headers["content-type"] || "audio/webm");
+        res.json(r);
       } catch (e) {
-        console.error("voz/procesar", e);
-        res.status(500).json({ error: "Error interno" });
+        console.error("voz/procesar", e.message);
+        const noEntendido = e.message === "Audio no entendido";
+        res.status(noEntendido ? 422 : 502).json({ error: noEntendido ? "No se entendió el audio" : "No se pudo procesar" });
       }
     }
   );
 
   // 2) Lead confirmado -> Make (email a Pedro)
   app.options("/voz/lead", cors);
-  app.post("/voz/lead", cors, express.json({ limit: "1mb" }), async (req, res) => {
+  app.post("/voz/lead", cors, limitar, express.json({ limit: "1mb" }), async (req, res) => {
     try {
       const b = req.body || {};
       if (!b.telefono) return res.status(400).json({ error: "Falta teléfono" });
@@ -203,7 +160,24 @@ async function extraerDatos(texto) {
     }),
   });
   if (!ex.ok) throw new Error("Extraccion " + ex.status);
-  return JSON.parse((await ex.json()).choices[0].message.content);
+  return normalizar(JSON.parse((await ex.json()).choices[0].message.content));
+}
+
+// El modelo a veces devuelve "unos 80 m2", "Sí" o "" — lo dejamos limpio
+function normalizar(d) {
+  d = d && typeof d === "object" ? d : {};
+  for (const k of Object.keys(d)) if (d[k] === "") d[k] = null;
+  if (d.metros != null) {
+    const n = parseInt(String(d.metros).replace(/\./g, "").match(/\d+/) || "", 10);
+    d.metros = n >= 10 && n <= 2000 ? n : null;
+  }
+  if (d.ascensor != null) {
+    const a = String(d.ascensor).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    d.ascensor = a.startsWith("si") ? "si" : a.startsWith("no") ? "no" : null;
+  }
+  const faltan = ["zona", "metros", "planta"].filter((k) => d[k] == null);
+  d.faltan = faltan;
+  return d;
 }
 
 // audio (Buffer) -> { transcripcion, datos }
@@ -215,5 +189,6 @@ async function procesarAudio(buffer, contentType) {
 }
 module.exports.transcribirAudio = transcribirAudio;
 module.exports.extraerDatos = extraerDatos;
+module.exports.normalizar = normalizar;
 module.exports.procesarAudio = procesarAudio;
 module.exports.MAKE_WEBHOOK_URL = MAKE_WEBHOOK_URL;
