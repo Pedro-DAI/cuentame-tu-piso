@@ -12,7 +12,9 @@ const MAKE_WEBHOOK_URL =
 const EXTRACTION_PROMPT = `Eres un asistente de un agente inmobiliario de Barcelona.
 Recibes la transcripción de un propietario contando su piso. Extrae SOLO lo que dice explícitamente. Si algo no lo dice, pon null. No inventes nada.
 Devuelve exclusivamente un JSON con estas claves:
-- zona: barrio, calle o municipio (string o null)
+- zona: barrio o calle (string o null)
+- municipio: municipio o ciudad si lo dice explícitamente, por ejemplo "Barcelona", "Badalona" o "Sant Cugat" (string o null)
+- codigo_postal: código postal de 5 cifras si lo dice explícitamente, por ejemplo "08021" (string o null)
 - metros: metros cuadrados como número (number o null)
 - planta: planta como texto (string o null)
 - ascensor: "si", "no" o null
@@ -174,6 +176,10 @@ function normalizar(d) {
   if (d.ascensor != null) {
     const a = String(d.ascensor).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     d.ascensor = a.startsWith("si") ? "si" : a.startsWith("no") ? "no" : null;
+  }
+  if (d.codigo_postal != null) {
+        const cp = String(d.codigo_postal).match(/08\d{3}/);
+        d.codigo_postal = cp ? cp[0] : null;
   }
   const faltan = ["zona", "metros", "planta"].filter((k) => d[k] == null);
   d.faltan = faltan;
