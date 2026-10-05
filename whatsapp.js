@@ -2,7 +2,7 @@
 // Se monta desde server.js con:  require("./whatsapp")(app);
 const crypto = require("crypto");
 const express = require("express");
-const { procesarAudio, MAKE_WEBHOOK_URL } = require("./voz");
+const { procesarAudio, transcribirAudio, extraerDatos, MAKE_WEBHOOK_URL } = require("./voz");
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -20,12 +20,13 @@ const T = {
   noConsiente: "Sin problema. Si cambias de idea, escríbeme cuando quieras.",
   noEntendido:
     "No he podido escuchar bien el audio. ¿Me lo mandas otra vez, hablando un poco más cerca del móvil?",
-  zona: "¿En qué barrio o calle está el piso?",
-  metros: "¿Cuántos metros cuadrados tiene, más o menos? Escribe solo el número.",
+  zona: "¿En qué barrio o calle está el piso? Puedes decírmelo en un audio o escribirlo.",
+  metros: "¿Cuántos metros cuadrados tiene, más o menos? Puedes decírmelo en un audio o escribir el número.",
   metrosMal: "No he entendido el número. Escribe solo los metros, por ejemplo: 85",
-  planta: "¿En qué planta está? Por ejemplo: bajo, 3º o ático.",
-  ascensor: "¿El edificio tiene ascensor?",
+  planta: "¿En qué planta está? Puedes decírmelo en un audio o escribirlo. Por ejemplo: bajo, 3º o ático.",
+  ascensor: "¿El edificio tiene ascensor? Pulsa un botón o dímelo en un audio.",
   usaBotones: "Pulsa uno de los botones de arriba, por favor.",
+  repite: "No te he entendido bien. ¿Me lo repites en otro audio, o lo escribes?",
   extra: "Anotado, se lo paso a Pedro.",
 };
 
@@ -154,25 +155,39 @@ async function procesarEntrada(msg, nombre) {
     return siguientePaso(s, from);
   }
 
-  // 3) Datos que faltan
-  if (s.paso === "zona") {
-    if (!txt) return texto(from, T.zona);
-    s.datos.zona = txt; return siguientePaso(s, from);
-  }
-  if (s.paso === "metros") {
-    const n = parseInt((txt.match(/\d+/) || [])[0], 10);
-    if (!(n >= 10 && n <= 2000)) return texto(from, T.metrosMal);
-    s.datos.metros = n; return siguientePaso(s, from);
-  }
-  if (s.paso === "planta") {
-    if (!txt) return texto(from, T.planta);
-    s.datos.planta = txt; return siguientePaso(s, from);
-  }
-  if (s.paso === "ascensor") {
-    if (boton === "asc_si") s.datos.ascensor = "si";
-    else if (boton === "asc_no") s.datos.ascensor = "no";
-    else return botones(from, T.ascensor, [["asc_si", "Sí"], ["asc_no", "No"]]);
-    return siguientePaso(s, from);
+  // 3) Datos que faltan (por texto, audio o botón)
+  if (["zona", "metros", "planta", "ascensor"].includes(s.paso)) {
+    const campo = s.paso;
+    if (msg.type === "audio") {
+      try {
+        const { buffer, contentType } = await descargarAudio(msg.audio.id);
+        const t = await transcribirAudio(buffer, contentType);
+        const d2 = t ? await extraerDatos(t) : {};
+        for (const k of ["zona", "metros", "planta", "ascensor"]) {
+          if (!s.datos[k] && d2[k] != null && d2[k] !== "") s.datos[k] = d2[k];
+        }
+      } catch (e) {
+        console.error("wa audio dato", e.message);
+        return texto(from, T.noEntendido);
+      }
+      if (!s.datos[campo] || (campo === "ascensor" && s.datos.ascensor !== "si" && s.datos.ascensor !== "no")) {
+        return texto(from, T.repite);
+      }
+      return siguientePaso(s, from);
+    }
+    if (campo === "ascensor") {
+      if (boton === "asc_si") s.datos.ascensor = "si";
+      else if (boton === "asc_no") s.datos.ascensor = "no";
+      else return botones(from, T.ascensor, [["asc_si", "Sí"], ["asc_no", "No"]]);
+      return siguientePaso(s, from);
+    }
+    if (campo === "metros") {
+      const n = parseInt((txt.match(/\d+/) || [])[0], 10);
+      if (!(n >= 10 && n <= 2000)) return texto(from, T.metrosMal);
+      s.datos.metros = n; return siguientePaso(s, from);
+    }
+    if (!txt) return texto(from, T[campo]);
+    s.datos[campo] = txt; return siguientePaso(s, from);
   }
 
   // 4) Ya cerrado: lo que escriba después se lo pasamos a Pedro

@@ -175,8 +175,8 @@ module.exports = function (app) {
   });
 };
 
-// Reutilizable desde whatsapp.js: audio (Buffer) -> { transcripcion, datos }
-async function procesarAudio(buffer, contentType) {
+// Reutilizable desde whatsapp.js
+async function transcribirAudio(buffer, contentType) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("Falta OPENAI_API_KEY");
   const ct = contentType || "audio/ogg";
@@ -188,19 +188,32 @@ async function procesarAudio(buffer, contentType) {
     method: "POST", headers: { Authorization: "Bearer " + key }, body: form,
   });
   if (!tr.ok) throw new Error("Whisper " + tr.status);
-  const transcripcion = ((await tr.json()).text || "").trim();
-  if (transcripcion.length < 10) throw new Error("Audio no entendido");
+  return ((await tr.json()).text || "").trim();
+}
+
+async function extraerDatos(texto) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("Falta OPENAI_API_KEY");
   const ex = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o-mini", temperature: 0, response_format: { type: "json_object" },
-      messages: [{ role: "system", content: EXTRACTION_PROMPT }, { role: "user", content: transcripcion }],
+      messages: [{ role: "system", content: EXTRACTION_PROMPT }, { role: "user", content: texto }],
     }),
   });
   if (!ex.ok) throw new Error("Extraccion " + ex.status);
-  const datos = JSON.parse((await ex.json()).choices[0].message.content);
+  return JSON.parse((await ex.json()).choices[0].message.content);
+}
+
+// audio (Buffer) -> { transcripcion, datos }
+async function procesarAudio(buffer, contentType) {
+  const transcripcion = await transcribirAudio(buffer, contentType);
+  if (transcripcion.length < 10) throw new Error("Audio no entendido");
+  const datos = await extraerDatos(transcripcion);
   return { transcripcion, datos };
 }
+module.exports.transcribirAudio = transcribirAudio;
+module.exports.extraerDatos = extraerDatos;
 module.exports.procesarAudio = procesarAudio;
 module.exports.MAKE_WEBHOOK_URL = MAKE_WEBHOOK_URL;
