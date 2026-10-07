@@ -161,15 +161,16 @@ s.paso = "listo";
 
 async function procesarEntrada(msg, nombre) {
     const from = msg.from;
+    const txt = msg.type === "text" && msg.text ? (msg.text.body || "").trim() : "";
     let s = estado.get(from);
     if (s && Date.now() - s.t > TTL_MS) { estado.delete(from); s = null; }
-    if (!s) { s = { paso: "inicio", datos: {}, nombre, t: Date.now() }; estado.set(from, s); }
+    if (s && /^reiniciar$/i.test(txt)) { estado.delete(from); s = null; } // para volver a probar sin esperar 24h
+if (!s) { s = { paso: "inicio", datos: {}, nombre, t: Date.now() }; estado.set(from, s); }
     s.t = Date.now();
     if (nombre) s.nombre = nombre;
 
 const boton = msg.type === "interactive" && msg.interactive && msg.interactive.button_reply
     ? msg.interactive.button_reply.id : null;
-    const txt = msg.type === "text" && msg.text ? (msg.text.body || "").trim() : "";
 
 const consentBotones = [["consent_si", "Sí, de acuerdo"], ["consent_no", "No, gracias"]];
     // Si manda el audio (o una descripción larga) ANTES de aceptar, lo guardamos
